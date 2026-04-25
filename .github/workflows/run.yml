@@ -1,0 +1,57 @@
+name: Run USDT Bot
+
+# Copy this file to .github/workflows/run.yml in the public runner repo
+# (e.g. siamak/usdtbot-runner — public, no source code).
+#
+# Because the repo is public, GitHub Actions minutes are unlimited and free.
+# The Docker image is pulled from the private repo's public GHCR package.
+# No secrets from the source code are exposed — only the workflow file is visible.
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+env:
+  IMAGE: ghcr.io/siamak/usdtbot:latest
+
+jobs:
+  run-bot:
+    name: Run bot
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    concurrency:
+      group: usdt-price-bot
+      cancel-in-progress: false
+
+    steps:
+      - name: Pull image
+        run: docker pull ${{ env.IMAGE }}
+
+      - name: Run bot
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_ERROR_CHAT_ID: ${{ secrets.TELEGRAM_ERROR_CHAT_ID }}
+          UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+          UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+          PARSE_SERVER_URL: ${{ secrets.PARSE_SERVER_URL }}
+          PARSE_APP_ID: ${{ secrets.PARSE_APP_ID }}
+          PARSE_JAVASCRIPT_KEY: ${{ secrets.PARSE_JAVASCRIPT_KEY }}
+          PARSE_MASTER_KEY: ${{ secrets.PARSE_MASTER_KEY }}
+          PARSE_DATABASE_NAME: ${{ secrets.PARSE_DATABASE_NAME }}
+          ABAN_TETHER_TOKEN: ${{ secrets.ABAN_TETHER_TOKEN }}
+        run: |
+          docker run --rm \
+            -e TELEGRAM_BOT_TOKEN \
+            -e TELEGRAM_CHAT_ID \
+            -e TELEGRAM_ERROR_CHAT_ID \
+            -e UPSTASH_REDIS_REST_URL \
+            -e UPSTASH_REDIS_REST_TOKEN \
+            -e PARSE_SERVER_URL \
+            -e PARSE_APP_ID \
+            -e PARSE_JAVASCRIPT_KEY \
+            -e PARSE_MASTER_KEY \
+            -e PARSE_DATABASE_NAME \
+            -e ABAN_TETHER_TOKEN \
+            ${{ env.IMAGE }}
