@@ -8,9 +8,10 @@ name: Run USDT Bot
 # No secrets from the source code are exposed — only the workflow file is visible.
 
 on:
-  schedule:
-    - cron: '*/15 * * * *'
   workflow_dispatch:
+  repository_dispatch:
+    types:
+      - run-usdt-bot
 
 env:
   IMAGE: ghcr.io/siamak/usdtbot:latest
