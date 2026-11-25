@@ -7,11 +7,11 @@ name: Run USDT Bot
 # The Docker image is pulled from the private repo's public GHCR package.
 # No secrets from the source code are exposed — only the workflow file is visible.
 #
-# Exchange APIs block GitHub runner IPs, so outbound exchange calls go through an
-# SSH SOCKS5 tunnel to a proxy server. Required secrets in the runner repo:
-#   PROXY_SSH_HOST  – proxy server host/IP (kept in a secret, not in this public file)
-#   PROXY_SSH_USER  – ssh user on the proxy server
-#   PROXY_SSH_KEY   – private key whose public half is in that user's authorized_keys
+# Exchange APIs block GitHub runner IPs, so exchange requests go through the
+# exchange relay (relay/exchange-relay.php) on a host with a fixed IP. Required
+# secrets in the runner repo:
+#   EXCHANGE_RELAY_URL     – https URL of exchange-relay.php
+#   EXCHANGE_RELAY_SECRET  – shared secret (>= 16 chars), same value as on the relay host
 
 on:
   schedule:
@@ -20,7 +20,6 @@ on:
 
 env:
   IMAGE: ghcr.io/siamak/usdtbot:latest
-  SOCKS_PORT: '1080'
 
 jobs:
   run-bot:
@@ -35,32 +34,6 @@ jobs:
       - name: Pull image
         run: docker pull ${{ env.IMAGE }}
 
-      - name: Open SSH SOCKS proxy tunnel
-        env:
-          PROXY_SSH_HOST: ${{ secrets.PROXY_SSH_HOST }}
-          PROXY_SSH_USER: ${{ secrets.PROXY_SSH_USER }}
-          PROXY_SSH_KEY: ${{ secrets.PROXY_SSH_KEY }}
-        run: |
-          install -m 700 -d ~/.ssh
-          printf '%s\n' "$PROXY_SSH_KEY" > ~/.ssh/proxy_key
-          chmod 600 ~/.ssh/proxy_key
-          ssh-keyscan -H "$PROXY_SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
-          # -D: local SOCKS5 proxy on 127.0.0.1:$SOCKS_PORT that exits on the proxy server.
-          # -f -N: background, no remote command. ExitOnForwardFailure: fail fast if tunnel can't open.
-          ssh -f -N -D "127.0.0.1:${SOCKS_PORT}" \
-            -i ~/.ssh/proxy_key \
-            -o ExitOnForwardFailure=yes \
-            -o ServerAliveInterval=30 \
-            -o BatchMode=yes \
-            "${PROXY_SSH_USER}@${PROXY_SSH_HOST}"
-          # Confirm the SOCKS port is listening before the bot starts.
-          for i in 1 2 3 4 5; do
-            (echo > /dev/tcp/127.0.0.1/${SOCKS_PORT}) 2>/dev/null && exit 0
-            sleep 1
-          done
-          echo "SOCKS proxy not listening on ${SOCKS_PORT}" >&2
-          exit 1
-
       - name: Run bot
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
@@ -73,14 +46,12 @@ jobs:
           PARSE_JAVASCRIPT_KEY: ${{ secrets.PARSE_JAVASCRIPT_KEY }}
           PARSE_MASTER_KEY: ${{ secrets.PARSE_MASTER_KEY }}
           PARSE_DATABASE_NAME: ${{ secrets.PARSE_DATABASE_NAME }}
-          ABAN_TETHER_TOKEN: ${{ secrets.ABAN_TETHER_TOKEN }}
           CURRENCY_API_URL: ${{ secrets.CURRENCY_API_URL }}
           CURRENCY_API_TOKEN: ${{ secrets.CURRENCY_API_TOKEN }}
+          EXCHANGE_RELAY_URL: ${{ secrets.EXCHANGE_RELAY_URL }}
+          EXCHANGE_RELAY_SECRET: ${{ secrets.EXCHANGE_RELAY_SECRET }}
         run: |
-          # --network host lets the container reach the runner's 127.0.0.1 SOCKS tunnel.
           docker run --rm \
-            --network host \
-            -e SOCKS_PROXY_URL="socks5h://127.0.0.1:${SOCKS_PORT}" \
             -e TELEGRAM_BOT_TOKEN \
             -e TELEGRAM_CHAT_ID \
             -e TELEGRAM_ERROR_CHAT_ID \
@@ -91,7 +62,8 @@ jobs:
             -e PARSE_JAVASCRIPT_KEY \
             -e PARSE_MASTER_KEY \
             -e PARSE_DATABASE_NAME \
-            -e ABAN_TETHER_TOKEN \
             -e CURRENCY_API_URL \
             -e CURRENCY_API_TOKEN \
+            -e EXCHANGE_RELAY_URL \
+            -e EXCHANGE_RELAY_SECRET \
             ${{ env.IMAGE }}
