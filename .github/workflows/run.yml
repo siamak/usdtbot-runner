@@ -17,6 +17,9 @@ on:
   schedule:
     - cron: '*/15 * * * *'
   workflow_dispatch:
+  repository_dispatch:
+    types:
+      - run-usdt-bot
 
 env:
   IMAGE: ghcr.io/siamak/usdtbot:latest
